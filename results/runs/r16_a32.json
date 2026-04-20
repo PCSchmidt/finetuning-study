@@ -1,0 +1,13 @@
+{
+  "run_name": "r16_a32",
+  "lora_rank": 16,
+  "lora_alpha": 32,
+  "learning_rate": 0.0003,
+  "num_epochs": 3,
+  "trainable_params": 1622016,
+  "trainable_pct": 1.2866829532785438,
+  "train_loss": 2.783180508931478,
+  "eval_loss": 2.5101664066314697,
+  "train_time_seconds": 6746.463549852371,
+  "train_samples_per_second": 0.222
+}

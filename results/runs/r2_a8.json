@@ -1,0 +1,13 @@
+{
+  "run_name": "r2_a8",
+  "lora_rank": 2,
+  "lora_alpha": 8,
+  "learning_rate": 0.0003,
+  "num_epochs": 3,
+  "trainable_params": 202752,
+  "trainable_pct": 0.1627,
+  "train_loss": 2.8577,
+  "eval_loss": 2.5607,
+  "train_time_seconds": 7481.1,
+  "train_samples_per_second": 0.0
+}

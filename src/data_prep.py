@@ -19,7 +19,7 @@ def load_samsum(split: str = "train", max_samples: int | None = None) -> Dataset
     Returns:
         HuggingFace Dataset with 'dialogue' and 'summary' columns.
     """
-    ds = load_dataset("samsum", split=split, trust_remote_code=True)
+    ds = load_dataset("knkarthick/samsum", split=split)
     if max_samples is not None:
         ds = ds.select(range(min(max_samples, len(ds))))
     return ds

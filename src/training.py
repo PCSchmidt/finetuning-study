@@ -2,14 +2,17 @@
 
 Uses HuggingFace Trainer with configurable hyperparameters.
 Logs metrics to CSV for later visualization.
+Per-run persistence via JSON + CSV for crash-safe recovery.
 """
 
 from __future__ import annotations
 
 import csv
+import json
 import os
 import time
 from dataclasses import dataclass, field
+from glob import glob
 from pathlib import Path
 
 from transformers import (
@@ -52,6 +55,22 @@ class TrainResult:
     train_time_seconds: float
     train_samples_per_second: float
     log_history: list = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        """Return all fields except log_history (for JSON/CSV serialization)."""
+        return {
+            "run_name": self.run_name,
+            "lora_rank": self.lora_rank,
+            "lora_alpha": self.lora_alpha,
+            "learning_rate": self.learning_rate,
+            "num_epochs": self.num_epochs,
+            "trainable_params": self.trainable_params,
+            "trainable_pct": self.trainable_pct,
+            "train_loss": self.train_loss,
+            "eval_loss": self.eval_loss,
+            "train_time_seconds": self.train_time_seconds,
+            "train_samples_per_second": self.train_samples_per_second,
+        }
 
 
 def train_model(
@@ -113,7 +132,7 @@ def train_model(
 
     eval_output = trainer.evaluate()
 
-    return TrainResult(
+    result = TrainResult(
         run_name=config.run_name,
         lora_rank=config.lora_rank,
         lora_alpha=config.lora_alpha,
@@ -127,8 +146,15 @@ def train_model(
         train_samples_per_second=train_output.metrics.get(
             "train_samples_per_second", 0
         ),
-        log_history=trainer.state.log_history,
+        log_history=list(trainer.state.log_history),
     )
+
+    # Explicit cleanup to prevent OOM across sequential runs
+    del trainer, train_output, eval_output
+    import gc
+    gc.collect()
+
+    return result
 
 
 def save_results(results: list[TrainResult], path: str = "results/ablation_results.csv"):
@@ -152,3 +178,70 @@ def save_results(results: list[TrainResult], path: str = "results/ablation_resul
         writer.writeheader()
         for r in results:
             writer.writerow({k: getattr(r, k) for k in fieldnames})
+
+
+# --- Per-run persistence for crash-safe recovery ---
+
+FIELDNAMES = [
+    "run_name", "lora_rank", "lora_alpha", "learning_rate",
+    "num_epochs", "trainable_params", "trainable_pct",
+    "train_loss", "eval_loss", "train_time_seconds",
+    "train_samples_per_second",
+]
+
+
+def save_run_result(
+    result: TrainResult,
+    runs_dir: str = "results/runs",
+    csv_path: str = "results/ablation_results.csv",
+) -> None:
+    """Persist a single run immediately after training completes.
+
+    Writes:
+      - results/runs/{run_name}.json  (full metrics)
+      - Appends one row to results/ablation_results.csv (creates with header if new)
+    """
+    os.makedirs(runs_dir, exist_ok=True)
+
+    # JSON
+    json_path = os.path.join(runs_dir, f"{result.run_name}.json")
+    with open(json_path, "w") as f:
+        json.dump(result.to_dict(), f, indent=2)
+
+    # CSV append
+    csv_exists = os.path.isfile(csv_path)
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+    with open(csv_path, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+        if not csv_exists:
+            writer.writeheader()
+        writer.writerow(result.to_dict())
+
+
+def load_completed_runs(runs_dir: str = "results/runs") -> dict[str, dict]:
+    """Load all completed run results from per-run JSON files.
+
+    Returns:
+        Dict mapping run_name -> metrics dict.
+    """
+    completed = {}
+    for path in sorted(glob(os.path.join(runs_dir, "*.json"))):
+        fname = os.path.basename(path)
+        if fname.endswith("_logs.json"):
+            continue  # skip log history files
+        with open(path) as f:
+            data = json.load(f)
+        completed[data["run_name"]] = data
+    return completed
+
+
+def save_log_history(
+    run_name: str,
+    log_history: list,
+    runs_dir: str = "results/runs",
+) -> None:
+    """Save per-run training log history for curve reconstruction."""
+    os.makedirs(runs_dir, exist_ok=True)
+    path = os.path.join(runs_dir, f"{run_name}_logs.json")
+    with open(path, "w") as f:
+        json.dump(log_history, f, indent=2)

@@ -1,0 +1,13 @@
+{
+  "run_name": "r8_a16",
+  "lora_rank": 8,
+  "lora_alpha": 16,
+  "learning_rate": 0.0003,
+  "num_epochs": 3,
+  "trainable_params": 811008,
+  "trainable_pct": 0.6475,
+  "train_loss": 2.818,
+  "eval_loss": 2.5329,
+  "train_time_seconds": 7362.9,
+  "train_samples_per_second": 0.0
+}

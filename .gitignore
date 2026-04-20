@@ -6,9 +6,13 @@ dist/
 build/
 .ipynb_checkpoints/
 results/onnx_model*/
-results/*.csv
-results/*.json
+results/checkpoints/
 evidence/*.png
 *.pt
 *.bin
 *.safetensors
+# LaTeX build artifacts
+notebooks/*.aux
+notebooks/*.log
+notebooks/*.out
+notebooks/*.tex

@@ -1,0 +1,13 @@
+{
+  "run_name": "r4_a16",
+  "lora_rank": 4,
+  "lora_alpha": 16,
+  "learning_rate": 0.0003,
+  "num_epochs": 3,
+  "trainable_params": 405504,
+  "trainable_pct": 0.3248,
+  "train_loss": 2.8194,
+  "eval_loss": 2.5329,
+  "train_time_seconds": 7458.4,
+  "train_samples_per_second": 0.0
+}

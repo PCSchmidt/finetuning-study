@@ -1,62 +1,62 @@
-# Demo Guide — Fine-Tuning Study
+# Demo Guide — Parameter-Efficient Fine-Tuning Study (LoRA)
 
-## 30-Second Pitch
+## Objective
 
-> "I ran a systematic LoRA rank ablation on GPT-2 for dialogue summarization — entirely on CPU.
-> The study shows that even rank-2 adapters with ~6K trainable parameters substantially beat
-> zero-shot, and rank-8 captures most of the fine-tuning benefit at 0.02% of model parameters.
-> All results are reproducible from the notebook."
+This project investigates how LoRA rank and alpha choices affect fine-tuning quality on a summarization task. The central question is practical: given that rank-2 and rank-16 adapters both update far less than 2% of a model's parameters, does rank actually matter, and where does the benefit flatten out?
 
-## What to Show
+To answer that, five configurations spanning rank [2, 4, 8, 16] and alpha [8, 16, 32] were trained on GPT-2 (124M) for dialogue summarization using the SAMSum dataset. Every run was evaluated with ROUGE and BERTScore, and the results were visualized as ablation heatmaps and training curves. All five runs are CPU-only and fully reproducible from the notebook on a standard laptop.
 
-### 1. The Ablation Design (30s)
-Open the notebook and scroll to Section 1 (Motivation). Point out:
-- The LoRA math: W' = W + (α/r)BA
-- The ablation table: 5 configurations varying rank and alpha
-- The theoretical parameter counts
+## Experiment Design
 
-### 2. Training Results (30s)
-Scroll to Section 7 (Results Analysis). Highlight:
-- Training loss curves showing convergence across configurations
-- The heatmap showing rank × alpha vs eval loss
-- Diminishing returns beyond rank 8
+The ablation varies two LoRA hyperparameters independently:
 
-### 3. Before/After Comparison (30s)
-Scroll to Section 9 (Best Model Evaluation). Show:
-- The metric comparison bar chart (base vs fine-tuned)
-- Side-by-side example outputs showing quality improvement
-- ROUGE and BERTScore improvements
+- **Rank** controls the dimensionality of the low-rank update matrices (A and B). Higher rank means more expressive capacity but more trainable parameters.
+- **Alpha** is a scaling factor applied as alpha/rank. Holding rank constant and increasing alpha increases the effective learning rate of the adapter.
 
-### 4. Code Quality (15s)
-Show the `src/` directory structure. Highlight:
-- Clean separation: data_prep, lora_config, training, evaluation, visualization
-- Tests passing in CI
-- Reproducibility: pyproject.toml with pinned dependencies
+LoRA replaces full weight updates with the product of two small matrices. For a weight matrix W, the adapted output is:
 
-## Key Talking Points
+```
+output = W * x + (alpha / rank) * B * A * x
+```
 
-1. **"The principles scale, not just the model."** The same rank ablation methodology works on
-   Llama 7B, Mistral, or any transformer. GPT-2 demonstrates the methodology on CPU.
+B and A are the only trained parameters. At rank 8 across all 24 attention projection layers in GPT-2, this yields 811,008 trainable parameters — 0.65% of the full model. At rank 2, that drops to 202,752. The original weights are frozen throughout.
 
-2. **"I understand the math."** α/r controls effective adaptation strength. Configurations with
-   the same α/r ratio behave similarly regardless of absolute values.
+Training used 500 SAMSum examples per run (chosen for CPU feasibility), 3 epochs, and a learning rate of 3e-4 with AdamW. Each run saves per-step loss history and a checkpoint for later evaluation.
 
-3. **"I design experiments, not just run code."** The study has a clear hypothesis, controlled
-   variables, and quantitative evaluation. This is how you validate ML decisions in production.
+## Navigating the Notebook
 
-4. **"CPU-feasible means reproducible."** Anyone can clone this repo and replicate the results
-   without needing GPU access or cloud credits.
+The notebook is organized in numbered sections that follow the experiment from setup through evaluation. The key sections are:
 
-## FAQ
+**Section 1 — Motivation** lays out the hypothesis and explains why rank is worth studying empirically rather than defaulting to a rule of thumb.
 
-**Q: Why not use a larger model?**
-A: CPU constraint. But the methodology is the same — rank ablation is model-size-agnostic.
-Production teams would apply this to Llama/Mistral on GPU.
+**Section 5 — LoRA Configuration** defines each of the five configurations and shows the parameter counts. This is where the ablation grid is established.
 
-**Q: Would more data help?**
-A: Yes. We use 500 examples for CPU feasibility. With full SAMSum (14K) and GPU, expect
-significantly better absolute scores while the relative rank ordering likely holds.
+**Section 7 — Results Analysis** contains the heatmap, training loss curves, and the diminishing returns comparison. The heatmap plots rank x alpha against eval loss; the pattern of interest is that rank 8 and rank 16 differ by less than 0.001 in eval loss despite rank 16 using twice as many trainable parameters.
 
-**Q: How does this relate to Journal Summarizer?**
-A: Journal Summarizer uses API-based LLMs. This study explores when a fine-tuned local model
-could replace API calls — lower latency, lower cost, better privacy.
+**Section 9 — Best Model Evaluation** applies the best checkpoint (rank 8, alpha 32) to the test set and compares it against base GPT-2 with no fine-tuning. ROUGE-L improves from 0.105 to 0.139; BERTScore F1 improves from 0.376 to 0.453. The qualitative comparison shows that base GPT-2 frequently generates off-topic or empty outputs, while the fine-tuned model consistently produces on-topic summaries.
+
+The PDF version of the notebook includes all cell outputs, charts, and printed results, so you do not need to re-run anything to see the full results.
+
+## Code Organization
+
+The `src/` directory has five modules with clear separation of responsibilities:
+
+- `data_prep.py` — loads and tokenizes SAMSum splits
+- `lora_config.py` — defines LoRA configurations and builds adapted models via PEFT
+- `training.py` — runs fine-tuning with HuggingFace Trainer; includes per-run JSON persistence for crash-safe recovery across sequential runs
+- `evaluation.py` — computes ROUGE-1/2/L and BERTScore; generates the before/after comparison
+- `visualization.py` — produces the ablation heatmaps, training curves, and parameter efficiency charts
+
+12 unit tests cover data loading, configuration building, output shapes, and metric calculation. Tests run on every push via GitHub Actions CI.
+
+## What the Results Mean
+
+The main finding is that rank 8 is the practical ceiling for this task and dataset size. Rank 4 gets within 0.022 eval loss of rank 8 at half the parameter count. Moving to rank 16 recovers less than 0.001 additional loss improvement while adding 811K parameters. This pattern of diminishing returns is the expected theoretical behavior of low-rank approximations and the experiment confirms it empirically.
+
+At 500 training examples, the absolute ROUGE scores are modest. With the full SAMSum dataset (14,000 examples) and GPU training, scores would improve substantially. The relative ordering of configurations — which ranks outperform others — would likely remain the same. The methodology itself scales directly to larger models: the same ablation design applied to Llama 3 or Mistral would follow identical steps, with GPU resources as the only change.
+
+## Limitations and Honest Context
+
+This is a coursework and learning project, not a production system. GPT-2 was chosen because it fits CPU training; it is not a competitive summarization model at this scale. The training set size of 500 examples was chosen for reproducibility on a laptop, which constrains absolute performance.
+
+The study does not cover quantization, inference optimization, or serving — those are addressed separately in the Inference Optimization Study. The goal here is specifically to understand the relationship between rank choice and fine-tuning quality in a controlled setting.
