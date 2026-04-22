@@ -10,6 +10,17 @@ Systematic LoRA rank ablation on GPT-2 for dialogue summarization, run entirely 
 - **CPU-only training** showing that meaningful fine-tuning research is feasible on a standard laptop
 - **Reproducible experiment design**: one variable changed at a time, version-controlled code, and documented methodology
 
+## Pipeline Overview
+
+```mermaid
+flowchart TD
+    A["GPT-2 124M\nPretrained Weights\nFrozen"] --> B["Inject LoRA Adapters\ninto Attention Layers\nA: rank x d, B: d x rank"]
+    B --> C["Train on SAMSum\n500 examples, 3 epochs, CPU-only"]
+    C --> D["Rank Ablation\nr = 2, 4, 8, 8, 16"]
+    D --> E["ROUGE + BERTScore Eval\n100 test examples"]
+    E --> F["Best: rank 16, alpha 32\nROUGE-L 0.139, BERTScore F1 0.453"]
+```
+
 ## Key Results
 
 The best configuration (rank 16, alpha 32) improved ROUGE-L from 0.105 to 0.139 and BERTScore F1 from 0.376 to 0.453 relative to zero-shot GPT-2. Most of this gain was already present at rank 8: moving from rank 8 to rank 16 adds 811K more trainable parameters while improving eval loss by less than 0.001 points.
